@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Calculadora de Rutas - Trufis</title>
+
+    <link rel="stylesheet" href="/static/estilos.css">
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <!-- Leaflet Routing Machine -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+</head>
+
+<body>
+
+<h1>Calculadora de Rutas para Trufis</h1>
+
+<div class="panel">
+    <label>Origen:</label>
+    <input type="text" id="origen" placeholder="Ej: Ceja El Alto">
+
+    <label>Destino:</label>
+    <input type="text" id="destino" placeholder="Ej: Plaza San Francisco">
+
+    <label>Tarifa por km (Bs):</label>
+    <input type="number" id="tarifa" value="2" step="0.1">
+
+    <button id="btnBuscarRuta">Buscar Ruta</button>
+    <button id="btnCalcular">Calcular Costo</button>
+    <button id="btnReiniciar">Reiniciar</button>
+</div>
+
+<div id="map"></div>
+<div id="resultado"></div>
+
+<!-- Archivo JS externo -->
+<script src="/static/js/mapa.js"></script>
+
+</body>
+</html>
