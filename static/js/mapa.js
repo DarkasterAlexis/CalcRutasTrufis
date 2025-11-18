@@ -1,375 +1,358 @@
-// mapa.js - versión profesional con autocompletado, marcadores personalizados, historial y cálculo automático
+// mapa.js - Integrado: autocompletado, Nominatim, routing, tarifas automáticas, historial, modo día/noche, resizer, UI robusta.
 
-// ---------------------------
-// Configuración de tarifas y velocidades
-// ---------------------------
-const TARIFAS = {
-    diurno: {
-        zonal: 2.50,
-        tramo_corto: 2.80,
-        tramo_largo: 3.30,
-        tramo_extra_largo: 3.50
-    },
-    nocturno: {
-        zonal: 3.00,
-        tramo_corto: 3.30,
-        tramo_largo: 3.50,
-        tramo_extra_largo: 4.00
-    }
-};
+document.addEventListener('DOMContentLoaded', () => {
 
-const TRAMOS_KM = {
-    zonal_max: 3.0,
-    tramo_corto_max: 6.0,
-    tramo_largo_max: 10.0
-    // >10 = extra largo
-};
-
-// velocidad en km/h por franjas horarias (basado en tu requerimiento)
-function velocidadPorHora(hour) {
-    // hour en 0-23
-    if (hour >= 6 && hour <= 9) return 25;     // pico mañana
-    if (hour >= 10 && hour <= 16) return 40;   // normal
-    if (hour >= 17 && hour <= 20) return 20;   // pico tarde
-    if (hour >= 21 && hour <= 23) return 45;   // fluido nocturno
-    // madrugada
-    return 50;
-}
-
-// si es nocturno: 21:00 - 05:59
-function esNocturno(hour) {
-    return (hour >= 21 && hour <= 23) || (hour >= 0 && hour <= 5);
-}
-
-// ---------------------------
-// Helper UI, storage
-// ---------------------------
-const $ = id => document.getElementById(id);
-
-function guardarHistorial(entry) {
-    let h = JSON.parse(localStorage.getItem('historial_rutas_v1') || '[]');
-    h.unshift(entry);
-    if (h.length > 30) h = h.slice(0,30);
-    localStorage.setItem('historial_rutas_v1', JSON.stringify(h));
-    renderHistorial();
-}
-
-function renderHistorial() {
-    const cont = $('historial');
-    const raw = JSON.parse(localStorage.getItem('historial_rutas_v1') || '[]');
-    cont.innerHTML = '';
-    raw.forEach((r, i) => {
-        const div = document.createElement('div');
-        div.className = 'item';
-        div.innerHTML = `<div class="title">${r.origen.nombre} → ${r.destino.nombre}</div>
-            <div class="meta">Dist: ${r.distancia} km · Tiempo: ${r.tiempo} · Precio: Bs ${r.precio} · ${new Date(r.fecha).toLocaleString()}</div>`;
-        div.addEventListener('click', () => {
-            // redibujar
-            dibujarRuta(r.origen.coord, r.destino.coord, true);
-        });
-        cont.appendChild(div);
-    });
-}
-renderHistorial();
-
-// ---------------------------
-// Inicializar mapa
-// ---------------------------
-const map = L.map('map').setView([-16.5, -68.15], 12);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-
-let controlRuta = null;
-let distanciaKm = 0;
-let ultimaOrigen = null;
-let ultimaDestino = null;
-
-// crear iconos personalizados (SVG en dataURI)
-function createIcon(color, label) {
-    const svg = encodeURIComponent(`
-        <svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24'>
-            <path fill='${color}' d='M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z'/>
-            <text x='12' y='14' font-size='8' fill='#fff' text-anchor='middle' font-family='Arial' dy='.3em'>${label||''}</text>
-        </svg>`);
-    return L.icon({
-        iconUrl: `data:image/svg+xml;utf8,${svg}`,
-        iconSize: [36,36],
-        iconAnchor: [18,36],
-        popupAnchor: [0,-36]
-    });
-}
-
-const iconOrigen = createIcon('#11698e','O');
-const iconDestino = createIcon('#2b7a78','D');
-
-// ---------------------------
-// Geocoding / Autocomplete (Nominatim)
-// ---------------------------
-// Nota: Nominatim pide identificar la aplicación. Aquí hacemos fetch desde cliente.
-// Agregar &limit=5 para sugerencias, &accept-language=es
-async function nominatimSearch(q, limit=6) {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=${limit}&accept-language=es&q=${encodeURIComponent(q)}`;
-    const res = await fetch(url, {
-        headers: {
-            // no podemos forzar User-Agent en navegador, pero incluiré un header personal identificador opcional
-            // algunas implementaciones de Nominatim ignoran este header en CORS context.
-            'Referer': window.location.origin
-        }
-    });
-    if (!res.ok) return [];
-    return res.json();
-}
-
-function hookupAutocomplete(inputId, sugerenciasId) {
-    const input = $(inputId);
-    const sugerencias = $(sugerenciasId);
-    let timeout = null;
-
-    input.addEventListener('input', () => {
-        const val = input.value.trim();
-        sugerencias.innerHTML = '';
-        if (timeout) clearTimeout(timeout);
-        if (!val) return;
-        timeout = setTimeout(async () => {
-            const items = await nominatimSearch(val, 6);
-            sugerencias.innerHTML = '';
-            items.forEach(item => {
-                const li = document.createElement('li');
-                li.textContent = item.display_name;
-                li.dataset.lat = item.lat;
-                li.dataset.lon = item.lon;
-                li.dataset.display = item.display_name;
-                li.addEventListener('click', () => {
-                    input.value = item.display_name;
-                    sugerencias.innerHTML = '';
-                });
-                sugerencias.appendChild(li);
-            });
-        }, 300);
-    });
-
-    // close on outside click
-    document.addEventListener('click', (ev) => {
-        if (!input.contains(ev.target) && !sugerencias.contains(ev.target)) {
-            sugerencias.innerHTML = '';
-        }
-    });
-}
-hookupAutocomplete('origen','sugerencias-origen');
-hookupAutocomplete('destino','sugerencias-destino');
-
-// ---------------------------
-// Dibujar ruta y actualizar UI
-// ---------------------------
-function determinarTipoPorDistancia(km) {
-    if (km <= TRAMOS_KM.zonal_max) return 'zonal';
-    if (km <= TRAMOS_KM.tramo_corto_max) return 'tramo_corto';
-    if (km <= TRAMOS_KM.tramo_largo_max) return 'tramo_largo';
-    return 'tramo_extra_largo';
-}
-
-function formatoMinutos(totalMin) {
-    if (!isFinite(totalMin)) return '—';
-    const h = Math.floor(totalMin / 60);
-    const m = Math.round(totalMin % 60);
-    return h > 0 ? `${h} h ${m} min` : `${m} min`;
-}
-
-function actualizarUI(origenNombre, destinoNombre, km, tiempoMin, tipo, tarifa) {
-    $('tipoTrufi').value = tipo.replace('_',' ');
-    $('tarifaCalc').value = tarifa.toFixed(2);
-    $('distancia').value = km;
-    $('tiempo').value = formatoMinutos(tiempoMin);
-    $('precio').value = `Bs ${ ( (parseFloat(km) * tarifa) ).toFixed(2) }`;
-}
-
-// dibujar ruta, si fromHist true no guarda nuevo historial (cuando viene del historial)
-async function dibujarRuta(origenCoord, destinoCoord, fromHist=false) {
-    if (controlRuta) {
-        map.removeControl(controlRuta);
-        controlRuta = null;
-    }
-
-    controlRuta = L.Routing.control({
-        waypoints: [
-            L.latLng(origenCoord.lat, origenCoord.lon),
-            L.latLng(destinoCoord.lat, destinoCoord.lon)
-        ],
-        lineOptions: { styles: [{ color: '#11698e', opacity: 0.8, weight: 5 }] },
-        createMarker: function(i, wp){
-            if (i === 0) return L.marker(wp.latLng, {icon: iconOrigen}).bindPopup('Origen');
-            return L.marker(wp.latLng, {icon: iconDestino}).bindPopup('Destino');
-        },
-        routeWhileDragging: true,
-        fitSelectedRoutes: true,
-        showAlternatives: false
-    })
-    .on('routesfound', function(e){
-        const route = e.routes[0];
-        distanciaKm = (route.summary.totalDistance / 1000);
-        const kmRounded = Number(distanciaKm.toFixed(2));
-
-        // determinar hora actual local y nocturno
-        const now = new Date();
-        const hour = now.getHours();
-        const noct = esNocturno(hour) ? 'nocturno' : 'diurno';
-
-        // tipo de tramo automático
-        const tipo = determinarTipoPorDistancia(kmRounded);
-
-        // tarifa por km aplicada
-        const tarifa = TARIFAS[noct][tipo];
-
-        // velocidad según hora (km/h)
-        const vel = velocidadPorHora(hour);
-        const tiempoHoras = kmRounded / vel;
-        const tiempoMinutos = tiempoHoras * 60;
-
-        // actualizar UI
-        actualizarUI(null, null, kmRounded, tiempoMinutos, tipo, tarifa);
-
-        // guardar coordenadas en variables globales para usar en cálculo/guardar
-        ultimaOrigen = { lat: origenCoord.lat, lon: origenCoord.lon, nombre: $('origen').value || 'Origen' };
-        ultimaDestino = { lat: destinoCoord.lat, lon: destinoCoord.lon, nombre: $('destino').value || 'Destino' };
-
-        // guardar en historial (si no viene desde historial)
-        if (!fromHist) {
-            const entry = {
-                fecha: new Date().toISOString(),
-                origen: { nombre: ultimaOrigen.nombre, coord: ultimaOrigen },
-                destino: { nombre: ultimaDestino.nombre, coord: ultimaDestino },
-                distancia: kmRounded,
-                tiempo: formatoMinutos(tiempoMinutos),
-                tipo: tipo,
-                tarifa: tarifa,
-                precio: Number((kmRounded * tarifa).toFixed(2))
-            };
-            guardarHistorial(entry);
-        }
-    })
-    .addTo(map);
-}
-
-// ---------------------------
-// Obtener coordenadas desde la caja de texto (usa Nominatim, toma primer resultado)
-// ---------------------------
-async function buscarCoordenadaDeTexto(texto) {
-    if (!texto || texto.trim() === '') return null;
-    const items = await nominatimSearch(texto, 1);
-    if (!items || items.length === 0) return null;
-    return {
-        lat: parseFloat(items[0].lat),
-        lon: parseFloat(items[0].lon),
-        nombre: items[0].display_name
+    // ---------- CONFIG ----------
+    const TRAMOS_KM = { zonal_max: 3.0, tramo_corto_max: 6.0, tramo_largo_max: 10.0 };
+    const TARIFAS = {
+        diurno: { zonal: 2.50, tramo_corto: 2.80, tramo_largo: 3.30, tramo_extra_largo: 3.50 },
+        nocturno: { zonal: 3.00, tramo_corto: 3.30, tramo_largo: 3.50, tramo_extra_largo: 4.00 }
     };
-}
 
-// ---------------------------
-// Eventos botones
-// ---------------------------
+    // velocidad por franjas horarias
+    function velocidadPorHora(hour) {
+        if (hour >= 6 && hour <= 9) return 25;
+        if (hour >= 10 && hour <= 16) return 40;
+        if (hour >= 17 && hour <= 20) return 20;
+        if (hour >= 21 && hour <= 23) return 45;
+        return 50;
+    }
+    function esNocturno(hour) { return (hour >= 21 && hour <= 23) || (hour >= 0 && hour <= 5); }
 
-$('btnBuscarRuta').addEventListener('click', async () => {
-    const origenText = $('origen').value.trim();
-    const destinoText = $('destino').value.trim();
-    if (!origenText || !destinoText) {
-        alert('Ingrese origen y destino');
-        return;
+    // ---------- HELPERS ----------
+    const $ = id => document.getElementById(id);
+    function safeText(el) { return el ? el.textContent || el.value || '' : ''; }
+
+    // guardar ancho del panel
+    function guardarAnchoPanel(px) { try { localStorage.setItem('panel_ancho_v1', String(px)); } catch(e){} }
+    function leerAnchoPanel() { try { return parseInt(localStorage.getItem('panel_ancho_v1')) || null; } catch(e){return null} }
+
+    // historial
+    function guardarHistorial(entry) {
+        try {
+            const key='historial_rutas_v1';
+            const raw = JSON.parse(localStorage.getItem(key) || '[]');
+            raw.unshift(entry);
+            if (raw.length>50) raw.splice(50);
+            localStorage.setItem(key, JSON.stringify(raw));
+            renderHistorial();
+        } catch (err) { console.error('guardarHistorial',err) }
+    }
+    function obtenerHistorial() {
+        try { return JSON.parse(localStorage.getItem('historial_rutas_v1') || '[]'); } catch(e){return []}
     }
 
-    // primero obtener coordenadas
-    const origen = await buscarCoordenadaDeTexto(origenText);
-    const destino = await buscarCoordenadaDeTexto(destinoText);
+    // ---------- MAPA (día/noche tiles) ----------
+    const tilesDay = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19 });
+    const tilesDark = L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',{ maxZoom:19 });
 
-    if (!origen || !destino) {
-        alert('No se encontraron las ubicaciones. Intente con otra descripción.');
-        return;
+    const map = L.map('map', { layers:[tilesDay] }).setView([-16.5, -68.15], 12);
+    tilesDay.addTo(map);
+
+    let routingControl = null;
+    let markerOrigen = null;
+    let markerDestino = null;
+    let ultimaDistanciaKm = 0;
+    let ultimaTarifa = 0;
+    let ultimaTipo = '—';
+
+    // crear iconos SVG
+    function createIcon(color, label){
+        const svg = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24'><path fill='${color}' d='M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z'/><text x='12' y='14' font-size='8' fill='#fff' text-anchor='middle' font-family='Arial' dy='.3em'>${label||''}</text></svg>`);
+        return L.icon({ iconUrl:`data:image/svg+xml;utf8,${svg}`, iconSize:[36,36], iconAnchor:[18,36], popupAnchor:[0,-36] });
+    }
+    const iconO = createIcon('#11698e','O');
+    const iconD = createIcon('#2b7a78','D');
+
+    // ---------- AUTOCOMPLETE Nominatim (mejorado con teclado) ----------
+    async function nominatimSearch(q, limit=6) {
+        if (!q || !q.trim()) return [];
+        try {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&limit=${limit}&accept-language=es&q=${encodeURIComponent(q)}`;
+            const res = await fetch(url, { headers:{ 'Referer': window.location.origin }});
+            if (!res.ok) return [];
+            return await res.json();
+        } catch (err) { console.error('nominatim',err); return [];}
     }
 
-    // dibujar ruta
-    dibujarRuta({lat: origen.lat, lon: origen.lon}, {lat: destino.lat, lon: destino.lon});
-});
+    function hookupAutocomplete(inputId, sugerenciasId) {
+        const input = $(inputId), sugg = $(sugerenciasId);
+        if (!input || !sugg) return;
+        let idx = -1, currentItems = [];
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            sugg.innerHTML = ''; idx=-1; currentItems=[];
+            if (!q) return;
+            setTimeout(async () => {
+                const items = await nominatimSearch(q,6);
+                currentItems = items;
+                sugg.innerHTML = '';
+                items.forEach((it,i) => {
+                    const li = document.createElement('li');
+                    li.textContent = it.display_name;
+                    li.tabIndex = -1;
+                    li.dataset.lat = it.lat; li.dataset.lon = it.lon;
+                    li.addEventListener('click', () => {
+                        input.value = it.display_name; sugg.innerHTML=''; input.focus();
+                    });
+                    sugg.appendChild(li);
+                });
+            }, 250);
+        });
 
-$('btnCalcularServer').addEventListener('click', async () => {
-    // envia distancia y tarifa al servidor /api/calcular (tu app.py ya admite esto)
-    if (!distanciaKm || isNaN(distanciaKm) || distanciaKm <= 0) {
-        alert('Primero genere una ruta para calcular.');
-        return;
+        // keyboard navigation
+        input.addEventListener('keydown', (ev) => {
+            const lis = sugg.querySelectorAll('li');
+            if (!lis.length) return;
+            if (ev.key === 'ArrowDown') { ev.preventDefault(); idx = Math.min(idx+1, lis.length-1); highlight(lis, idx); }
+            if (ev.key === 'ArrowUp') { ev.preventDefault(); idx = Math.max(idx-1, 0); highlight(lis, idx); }
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                if (idx >=0 && lis[idx]) {
+                    lis[idx].click();
+                } else {
+                    // no selection: take first if exists
+                    if (lis[0]) lis[0].click();
+                }
+            }
+        });
+
+        function highlight(lis, ii){
+            lis.forEach((n)=>n.classList.remove('active'));
+            if (ii>=0 && lis[ii]) lis[ii].classList.add('active');
+        }
+
+        document.addEventListener('click',(ev)=>{ if (!input.contains(ev.target) && !sugg.contains(ev.target)) sugg.innerHTML=''; });
+    }
+    hookupAutocomplete('origen','sugerencias-origen');
+    hookupAutocomplete('destino','sugerencias-destino');
+
+    // ---------- UTIL: geocodificar 1 resultado ----------
+    async function geocodificarPrimero(texto){
+        const arr = await nominatimSearch(texto,1);
+        if (!arr || arr.length===0) return null;
+        return { lat: parseFloat(arr[0].lat), lon: parseFloat(arr[0].lon), display: arr[0].display_name };
     }
 
-    // tarifa que se muestra en UI
-    const tarifaTxt = $('tarifaCalc').value;
-    const tarifaNum = parseFloat(tarifaTxt);
-    if (isNaN(tarifaNum)) {
-        alert('Tarifa inválida.');
-        return;
+    // ---------- DETERMINAR TIPO Y TARIFA ----------
+    function tipoPorDistancia(km){
+        if (km <= TRAMOS_KM.zonal_max) return 'zonal';
+        if (km <= TRAMOS_KM.tramo_corto_max) return 'tramo_corto';
+        if (km <= TRAMOS_KM.tramo_largo_max) return 'tramo_largo';
+        return 'tramo_extra_largo';
+    }
+    function tarifaPorTipoYHora(tipo, hour){
+        const noct = esNocturno(hour) ? 'nocturno' : 'diurno';
+        return TARIFAS[noct][tipo];
     }
 
-    const response = await fetch('/api/calcular', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ distancia: Number(distanciaKm.toFixed(2)), tarifaKm: tarifaNum })
-    });
-    if (!response.ok) {
-        alert('Error al comunicarse con el servidor.');
-        return;
+    // ---------- DIBUJAR RUTA, ACTUALIZAR UI Y GUARDAR HISTORIAL ----------
+    function formatoMinutos(totalMin){
+        if (!isFinite(totalMin)) return '—';
+        const h=Math.floor(totalMin/60), m=Math.round(totalMin%60);
+        return h>0? `${h} h ${m} min` : `${m} min`;
     }
-    const data = await response.json();
-    // actualizar precio con lo que retorne el servidor
-    $('precio').value = `Bs ${data.costo}`;
-    // también actualizar historial para reflejar precio "oficial"
-    if (ultimaOrigen && ultimaDestino) {
-        const entry = {
-            fecha: new Date().toISOString(),
-            origen: { nombre: ultimaOrigen.nombre, coord: ultimaOrigen },
-            destino: { nombre: ultimaDestino.nombre, coord: ultimaDestino },
-            distancia: Number(distanciaKm.toFixed(2)),
-            tiempo: $('tiempo').value,
-            tipo: $('tipoTrufi').value,
-            tarifa: tarifaNum,
-            precio: Number(data.costo)
-        };
-        guardarHistorial(entry);
+
+    function actualizarUI(tipo, tarifa, km, tiempoMin, precioEstimado){
+        if ($('tipoTrufi')) $('tipoTrufi').value = tipo.replace('_',' ');
+        if ($('tarifaCalc')) $('tarifaCalc').value = Number(tarifa).toFixed(2);
+        if ($('distancia')) $('distancia').value = Number(km).toFixed(2);
+        if ($('tiempo')) $('tiempo').value = formatoMinutos(tiempoMin);
+        if ($('precio')) $('precio').value = `Bs ${Number(precioEstimado).toFixed(2)}`;
     }
-});
 
-$('btnReiniciar').addEventListener('click', () => {
-    if (controlRuta) { map.removeControl(controlRuta); controlRuta = null; }
-    distanciaKm = 0;
-    ultimaOrigen = null;
-    ultimaDestino = null;
-    $('origen').value = '';
-    $('destino').value = '';
-    $('tipoTrufi').value = '—';
-    $('tarifaCalc').value = '—';
-    $('distancia').value = '0';
-    $('tiempo').value = '—';
-    $('precio').value = '—';
-});
+    async function dibujarRutaCoords(orig, dest, fromHist=false){
+        try {
+            if (routingControl) { map.removeControl(routingControl); routingControl=null; }
 
-// ---------------------------
-// Al cargar, si existe historial, mostrarlo
-// ---------------------------
-renderHistorial();
+            routingControl = L.Routing.control({
+                waypoints: [ L.latLng(orig.lat, orig.lon), L.latLng(dest.lat, dest.lon) ],
+                createMarker: function(i, wp){
+                    return L.marker(wp.latLng, { icon: i===0? iconO : iconD });
+                },
+                routeWhileDragging:true,
+                fitSelectedRoutes:true,
+                showAlternatives:false,
+                lineOptions:{ styles:[{color:'#11698e', weight:5, opacity:0.9}] }
+            })
+            .on('routesfound', function(e){
+                const route = e.routes[0];
+                const distKm = Number((route.summary.totalDistance/1000).toFixed(2));
+                ultimaDistanciaKm = distKm;
 
-// ========== PANEL AJUSTABLE ==========
-const panel = document.getElementById("panel");
-const resizer = document.getElementById("resizer");
+                // hora local
+                const now = new Date(); const hour = now.getHours();
+                const tipo = tipoPorDistancia(distKm);
+                const tarifa = tarifaPorTipoYHora(tipo, hour);
+                const vel = velocidadPorHora(hour);
+                const tiempoMin = (distKm / vel) * 60; // minutos
+                const precioEst = distKm * tarifa;
 
-let mouseDown = false;
+                ultimaTarifa = tarifa; ultimaTipo = tipo;
 
-resizer.addEventListener("mousedown", function(e) {
-    mouseDown = true;
-});
+                actualizarUI(tipo, tarifa, distKm, tiempoMin, precioEst);
 
-document.addEventListener("mousemove", function(e) {
-    if (!mouseDown) return;
+                // guardar historial
+                if (!fromHist) {
+                    guardarHistorial({
+                        fecha: new Date().toISOString(),
+                        origen: { nombre: $('origen') ? $('origen').value || 'Origen' : 'Origen', coord: orig },
+                        destino: { nombre: $('destino') ? $('destino').value || 'Destino' : 'Destino', coord: dest },
+                        distancia: distKm,
+                        tiempo: formatoMinutos(tiempoMin),
+                        tipo: tipo,
+                        tarifa: Number(tarifa.toFixed(2)),
+                        precio: Number(precioEst.toFixed(2))
+                    });
+                }
+            })
+            .addTo(map);
 
-    const newWidth = e.clientX;
+            // colocar / actualizar markers visibles
+            if (markerOrigen) map.removeLayer(markerOrigen);
+            if (markerDestino) map.removeLayer(markerDestino);
+            markerOrigen = L.marker([orig.lat, orig.lon], {icon:iconO}).addTo(map).bindPopup('Origen').openPopup();
+            markerDestino = L.marker([dest.lat, dest.lon], {icon:iconD}).addTo(map).bindPopup('Destino');
 
-    if (newWidth > 250 && newWidth < 500) {
-        panel.style.width = newWidth + "px";
+        } catch (err) { console.error('dibujarRutaCoords',err); alert('Error trazando ruta (ver consola).'); }
     }
-});
 
-document.addEventListener("mouseup", function() {
-    mouseDown = false;
-});
+    // ---------- BOTONES ----------
+
+    async function accionBuscarRuta(){
+        const oText = ($('origen') ? $('origen').value.trim() : '');
+        const dText = ($('destino') ? $('destino').value.trim() : '');
+        if (!oText || !dText) { alert('Ingresa origen y destino'); return; }
+        const o = await geocodificarPrimero(oText);
+        const d = await geocodificarPrimero(dText);
+        if (!o || !d){ alert('No se encontraron las ubicaciones'); return; }
+        await dibujarRutaCoords({lat:o.lat, lon:o.lon}, {lat:d.lat, lon:d.lon});
+        try { map.invalidateSize(); } catch(e){}
+    }
+
+    async function accionCalcularServer(){
+        if (!ultimaDistanciaKm || isNaN(ultimaDistanciaKm) || ultimaDistanciaKm<=0){ alert('Primero genere una ruta'); return; }
+        // tarifa ya calculada por front (ultimaTarifa)
+        const tarifaSend = Number(ultimaTarifa);
+        try {
+            const resp = await fetch('/api/calcular', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify({ distancia: Number(ultimaDistanciaKm.toFixed(2)), tarifaKm: tarifaSend })
+            });
+            if (!resp.ok) { alert('Error comunicándose con servidor'); return; }
+            const data = await resp.json();
+            if ($('precio')) $('precio').value = `Bs ${Number(data.costo).toFixed(2)}`;
+            // actualizar última entrada del historial con precio "oficial"
+            const hist = obtenerHistorial();
+            if (hist && hist.length>0){
+                hist[0].precio = Number(data.costo);
+                localStorage.setItem('historial_rutas_v1', JSON.stringify(hist));
+                renderHistorial();
+            }
+            alert('Cálculo confirmado y actualizado.');
+        } catch (err) { console.error('accionCalcularServer',err); alert('Error al calcular (ver consola)'); }
+    }
+
+    function accionReiniciar(){
+        if (routingControl) { map.removeControl(routingControl); routingControl=null; }
+        if (markerOrigen) { map.removeLayer(markerOrigen); markerOrigen=null; }
+        if (markerDestino) { map.removeLayer(markerDestino); markerDestino=null; }
+        ultimaDistanciaKm=0; ultimaTarifa=0; ultimaTipo='—';
+        if ($('origen')) $('origen').value=''; if ($('destino')) $('destino').value='';
+        if ($('tipoTrufi')) $('tipoTrufi').value='—';
+        if ($('tarifaCalc')) $('tarifaCalc').value='—';
+        if ($('distancia')) $('distancia').value='0';
+        if ($('tiempo')) $('tiempo').value='—';
+        if ($('precio')) $('precio').value='—';
+    }
+
+    function accionClearHistory(){
+        if (!confirm('Borrar todo el historial local?')) return;
+        localStorage.removeItem('historial_rutas_v1');
+        renderHistorial();
+    }
+
+    // enlaces botones (si no existen, no rompen)
+    if ($('btnBuscarRuta')) $('btnBuscarRuta').addEventListener('click', accionBuscarRuta);
+    if ($('btnCalcularServer')) $('btnCalcularServer').addEventListener('click', accionCalcularServer);
+    if ($('btnReiniciar')) $('btnReiniciar').addEventListener('click', accionReiniciar);
+    if ($('btnClearHistory')) $('btnClearHistory').addEventListener('click', accionClearHistory);
+
+    // soporte teclas Enter para inputs: Enter en origen/destino hará búsqueda
+    if ($('origen')) $('origen').addEventListener('keydown', (e)=>{ if (e.key==='Enter') accionBuscarRuta(); });
+    if ($('destino')) $('destino').addEventListener('keydown', (e)=>{ if (e.key==='Enter') accionBuscarRuta(); });
+
+    // ---------- HISTORIAL UI ----------
+    function renderHistorial(){
+        const cont = $('historial'); if (!cont) return;
+        const raw = obtenerHistorial();
+        cont.innerHTML='';
+        raw.forEach((r, idx) => {
+            const div = document.createElement('div'); div.className='item';
+            div.innerHTML = `<div style="font-weight:700">${r.origen.nombre} → ${r.destino.nombre}</div>
+                <div style="font-size:12px;color:#ccc">Dist ${r.distancia} km · ${r.tiempo} · Bs ${Number(r.precio).toFixed(2)}</div>
+                <div style="font-size:11px;color:#999">${new Date(r.fecha).toLocaleString()}</div>`;
+            div.addEventListener('click', ()=> {
+                // redibujar ruta desde historial
+                if (r.origen && r.destino && r.origen.coord && r.destino.coord) {
+                    dibujarRutaCoords(r.origen.coord, r.destino.coord, true);
+                    if ($('origen')) $('origen').value = r.origen.nombre || '';
+                    if ($('destino')) $('destino').value = r.destino.nombre || '';
+                }
+            });
+            cont.appendChild(div);
+        });
+    }
+    renderHistorial();
+
+    // ---------- Day / Night toggle (map tiles + panel theme) ----------
+    function setTheme(isLight){
+        const panel = $('side-panel');
+        if (!panel) return;
+        if (isLight) panel.classList.remove('dark'), panel.classList.add('light'), map.addLayer(tilesDay), map.removeLayer(tilesDark);
+        else panel.classList.remove('light'), panel.classList.add('dark'), map.addLayer(tilesDark), map.removeLayer(tilesDay);
+        try { localStorage.setItem('theme_v1', isLight ? 'light' : 'dark'); } catch(e){}
+        try { map.invalidateSize(); } catch(e){}
+    }
+    if ($('btnToggleTheme')) {
+        $('btnToggleTheme').addEventListener('click', ()=>{
+            const panel = $('side-panel');
+            const isNowLight = panel && panel.classList.contains('dark');
+            setTheme(isNowLight);
+        });
+    }
+    // aplicar preferencia guardada
+    try {
+        const pref = localStorage.getItem('theme_v1');
+        if (pref === 'light') setTheme(true); else setTheme(false);
+    } catch(e){ setTheme(false); }
+
+    // ---------- RESIZER ----------
+    (function initResizer(){
+        const panel = $('side-panel'), resizer = $('resizer');
+        if (!panel || !resizer) return;
+        // aplicar ancho guardado
+        const ancho = leerAnchoPanel();
+        if (ancho) panel.style.width = ancho + 'px';
+        let down=false;
+        resizer.addEventListener('mousedown',(e)=>{ down=true; document.body.style.cursor='col-resize'; });
+        document.addEventListener('mousemove',(e)=>{
+            if (!down) return;
+            const nx = e.clientX;
+            if (nx > 200 && nx < 900) { panel.style.width = nx + 'px'; try{ guardarAnchoPanel(nx); map.invalidateSize(); }catch(e){} }
+        });
+        document.addEventListener('mouseup',()=>{ down=false; document.body.style.cursor='default'; });
+    })();
+
+    // ---------- UTIL: geocodificarPrimero (expuesta arriba pero define aquí) ----------
+    async function geocodificarPrimero(texto){
+        const arr = await nominatimSearch(texto,1);
+        if (!arr || arr.length===0) return null;
+        return { lat: parseFloat(arr[0].lat), lon: parseFloat(arr[0].lon), display: arr[0].display_name };
+    }
+
+    // ---------- Ajuste final del mapa al cargar ----
+    try { setTimeout(()=>map.invalidateSize(), 300); } catch(e){}
+
+}); // DOMContentLoaded end

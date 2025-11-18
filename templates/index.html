@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8" />
     <title>Calculadora de Rutas - Trufis</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
 
     <link rel="stylesheet" href="/static/estilos.css">
 
@@ -14,40 +15,79 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
     <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 </head>
-
 <body>
-
 <div id="contenedor-general">
-
     <!-- PANEL IZQUIERDO -->
-    <div id="panel">
-        <h2>Rutas de Trufi</h2>
+    <aside id="side-panel" class="dark">
+        <header class="panel-header">
+            <h1>Trufis — Calculadora</h1>
+            <div class="controls-top">
+                <button id="btnToggleTheme" title="Cambiar modo">🌗</button>
+            </div>
+        </header>
 
-        <label>Origen:</label>
-        <input type="text" id="origen" placeholder="Ej: Ceja El Alto">
+        <section class="panel-body">
+            <label for="origen">Origen</label>
+            <input id="origen" type="text" placeholder="Ej: Ceja El Alto" autocomplete="off">
+            <ul id="sugerencias-origen" class="sugerencias" role="listbox"></ul>
 
-        <label>Destino:</label>
-        <input type="text" id="destino" placeholder="Ej: Plaza San Francisco">
+            <label for="destino">Destino</label>
+            <input id="destino" type="text" placeholder="Ej: Plaza San Francisco" autocomplete="off">
+            <ul id="sugerencias-destino" class="sugerencias" role="listbox"></ul>
 
-        <button id="btnBuscarRuta">Buscar Ruta</button>
-        <button id="btnCalcular">Calcular Costo</button>
-        <button id="btnReiniciar">Reiniciar</button>
+            <div class="row small">
+                <button id="btnBuscarRuta">Buscar y Marcar Ruta</button>
+                <button id="btnCalcularServer">Confirmar / Calcular</button>
+            </div>
 
-        <div id="resultado"></div>
+            <div class="info-grid">
+                <div>
+                    <label>Tipo tramo</label>
+                    <input id="tipoTrufi" readonly value="—">
+                </div>
+                <div>
+                    <label>Tarifa (Bs/km)</label>
+                    <input id="tarifaCalc" readonly value="—">
+                </div>
+                <div>
+                    <label>Distancia (km)</label>
+                    <input id="distancia" readonly value="0">
+                </div>
+                <div>
+                    <label>Tiempo estimado</label>
+                    <input id="tiempo" readonly value="—">
+                </div>
+                <div style="grid-column:1/-1">
+                    <label>Precio estimado</label>
+                    <input id="precio" readonly value="—">
+                </div>
+            </div>
 
-        <h3>Historial</h3>
-        <ul id="historial"></ul>
-    </div>
+            <div class="row small">
+                <button id="btnReiniciar">Reiniciar</button>
+                <button id="btnClearHistory">Limpiar Historial</button>
+            </div>
+
+            <hr>
+
+            <h3>Historial <small>(local)</small></h3>
+            <div id="historial" class="historial" aria-live="polite"></div>
+        </section>
+
+        <footer class="panel-footer">
+            <small>Tarifas: diurno / nocturno (desde 21:00). Velocidad estimada variable por hora.</small>
+        </footer>
+    </aside>
 
     <!-- RESIZER -->
-    <div id="resizer"></div>
+    <div id="resizer" title="Arrastra para cambiar ancho"></div>
 
     <!-- MAPA -->
-    <div id="map"></div>
-
+    <main id="mapa-contenedor">
+        <div id="map"></div>
+    </main>
 </div>
 
 <script src="/static/js/mapa.js"></script>
-
 </body>
 </html>
