@@ -1,5 +1,5 @@
 /* estilos.css - Panel oscuro ajustable + mapa grande a la derecha
-   Diseño responsivo, sugerencias autocomplete, historial y botones.
+   Diseño responsivo, sugerencias autocomplete, historial, líneas de trufi y paradas.
 */
 
 :root{
@@ -14,7 +14,11 @@
     --panel-max: 700px;
 }
 
-*{box-sizing:border-box;font-family:Inter, Roboto, Arial, sans-serif}
+*{
+    box-sizing:border-box;
+    font-family:Inter, Roboto, Arial, sans-serif;
+}
+
 html,body,#map{height:100%}
 body{
     margin:0;
@@ -24,14 +28,20 @@ body{
     overflow:hidden;
 }
 
-/* CONTENEDOR PRINCIPAL */
+/* ===========================
+   CONTENEDOR PRINCIPAL
+   =========================== */
+
 #contenedor-general{
     display:flex;
     height:100vh;
     width:100vw;
 }
 
-/* PANEL LATERAL */
+/* ===========================
+   PANEL LATERAL
+   =========================== */
+
 #side-panel{
     display:flex;
     flex-direction:column;
@@ -56,15 +66,40 @@ body{
     justify-content:space-between;
     align-items:center;
 }
-
-.panel-header h1{margin:0;font-size:18px;color:var(--accent)}
-.controls-top button{
-    background:transparent;border:none;color:inherit;font-size:18px;cursor:pointer;padding:6px;border-radius:6px;
+.panel-header h1{
+    margin:0;
+    font-size:18px;
+    color:var(--accent);
 }
+
+.controls-top button{
+    background:transparent;
+    border:none;
+    color:inherit;
+    font-size:18px;
+    cursor:pointer;
+    padding:6px;
+    border-radius:6px;
+}
+
 .panel-body{padding-top:6px}
 
-label{display:block;font-size:12px;color:var(--muted);margin-top:10px;margin-bottom:6px}
-input[type="text"], input[type="number"], input[readonly]{
+label{
+    display:block;
+    font-size:12px;
+    color:var(--muted);
+    margin-top:10px;
+    margin-bottom:6px;
+}
+
+/* ============================
+   Inputs + Select básicos
+   ============================ */
+
+input[type="text"],
+input[type="number"],
+input[readonly],
+select{
     width:100%;
     padding:10px;
     border-radius:8px;
@@ -73,34 +108,77 @@ input[type="text"], input[type="number"], input[readonly]{
     color:#e6eef2;
     font-size:14px;
 }
-#side-panel.light input{background:#fafafa;color:#111;border:1px solid #eee}
+
+#side-panel.light input,
+#side-panel.light select{
+    background:#fafafa;
+    color:#111;
+    border:1px solid #eee;
+}
+
+/* ============================
+   AUTOCOMPLETE
+   ============================ */
 
 .sugerencias{
-    position:relative;
     list-style:none;
     margin:6px 0 0 0;
     padding:0;
     max-height:220px;
     overflow:auto;
     border-radius:8px;
-    background: #0d1011;
-    border: 1px solid rgba(255,255,255,0.04);
+    background:#0d1011;
+    border:1px solid rgba(255,255,255,0.04);
 }
-#side-panel.light .sugerencias{background:#fff;border:1px solid #eee}
+
+#side-panel.light .sugerencias{
+    background:#fff;
+    border:1px solid #eee;
+}
+
 .sugerencias li{
     padding:8px 10px;
     cursor:pointer;
     color:inherit;
 }
-.sugerencias li:hover, .sugerencias li.active{background:rgba(255,255,255,0.03)}
 
-.buttons{display:flex;gap:8px}
-.row.small{display:flex;gap:8px;margin-top:10px}
-.row.small button{
-    flex:1;padding:10px;border-radius:8px;border:none;background:var(--accent-2);color:#fff;font-weight:600;cursor:pointer;
+.sugerencias li:hover,
+.sugerencias li.active{
+    background:rgba(255,255,255,0.03);
 }
-.row.small button:nth-child(2){background:#2b7a78}
-.row.small button:hover{filter:brightness(.95)}
+
+/* ============================
+   BOTONES
+   ============================ */
+
+.row.small{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+}
+
+.row.small button{
+    flex:1;
+    padding:10px;
+    border-radius:8px;
+    border:none;
+    background:var(--accent-2);
+    color:#fff;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.row.small button:nth-child(2){
+    background:#2b7a78;
+}
+
+.row.small button:hover{
+    filter:brightness(.95);
+}
+
+/* ============================
+   GRID INFO
+   ============================ */
 
 .info-grid{
     display:grid;
@@ -108,39 +186,310 @@ input[type="text"], input[type="number"], input[readonly]{
     gap:8px;
     margin-top:12px;
 }
-.info-grid label{font-size:11px}
-.info-grid input{background:transparent;border:1px solid rgba(255,255,255,0.03)}
 
-.historial{margin-top:10px;max-height:220px;overflow:auto}
+.info-grid label{
+    font-size:11px;
+}
+
+.info-grid input{
+    background:transparent;
+    border:1px solid rgba(255,255,255,0.03);
+}
+
+#side-panel.light .info-grid input{
+    background:#fafafa;
+    border:1px solid #eee;
+    color:#111;
+}
+
+/* ============================
+   HISTORIAL (si se usa)
+   ============================ */
+
+.historial{
+    margin-top:10px;
+    max-height:220px;
+    overflow:auto;
+}
+
+.hist-item,
 .historial .item{
     background:rgba(255,255,255,0.02);
-    padding:10px;border-radius:8px;margin-bottom:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.02);
+    padding:10px;
+    border-radius:8px;
+    margin-bottom:8px;
+    cursor:pointer;
+    border:1px solid rgba(255,255,255,0.02);
 }
-.historial .item:hover{background:rgba(255,255,255,0.03)}
-.panel-footer{font-size:12px;color:var(--muted);padding-top:8px}
 
-/* RESIZER */
+.hist-item:hover{
+    background:rgba(255,255,255,0.03);
+}
+
+#side-panel.light .hist-item{
+    background:#fafafa;
+    border:1px solid #eee;
+}
+
+/* ============================
+   FOOTER
+   ============================ */
+
+.panel-footer{
+    font-size:12px;
+    color:var(--muted);
+    padding-top:8px;
+}
+
+/* ============================
+   RESIZER
+   ============================ */
+
 #resizer{
     width:6px;
     background:linear-gradient(180deg,#111 0%, #2b7a78 100%);
     cursor:col-resize;
 }
 
-/* MAPA CONTENEDOR */
-#mapa-contenedor{flex:1;position:relative}
-#map{height:100%;width:100%}
+/* ============================
+   MAPA
+   ============================ */
 
-/* RESPONSIVE */
+#mapa-contenedor{
+    flex:1;
+    position:relative;
+}
+
+#map{
+    height:100%;
+    width:100%;
+}
+
+/* ============================
+   RESPONSIVE
+   ============================ */
+
 @media (max-width:900px){
     #side-panel{width:40%}
     #resizer{display:none}
 }
+
 @media (max-width:600px){
     #contenedor-general{flex-direction:column}
-    #side-panel{width:100%;height:45vh;min-width:100%}
+    #side-panel{
+        width:100%;
+        height:45vh;
+        min-width:100%;
+    }
     #map{height:55vh}
     #resizer{display:none}
 }
 
-/* Small helper */
-small{color:var(--muted)}
+/* ============================
+   TEXTO SMALL
+   ============================ */
+
+small{
+    color:var(--muted);
+}
+
+/* ==================================
+   NUEVOS ESTILOS: PAÍS, LÍNEAS Y PARADAS
+   ================================== */
+
+/* Selector de país */
+.country-row select{
+    padding:8px 10px;
+    border-radius:8px;
+    border:none;
+    background:#0e1112;
+    color:#e6eef2;
+    font-size:13px;
+}
+
+#side-panel.light .country-row select{
+    background:#fafafa;
+    color:#111;
+    border:1px solid #eee;
+}
+
+/* =======================
+   LÍNEAS DE TRUFI SUGERIDAS
+   ======================= */
+
+.lineas-trufi{
+    margin-top:10px;
+    max-height:220px;
+    overflow:auto;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.linea-card{
+    background:rgba(255,255,255,0.02);
+    border-radius:8px;
+    padding:8px 10px;
+    border:1px solid rgba(255,255,255,0.02);
+    font-size:12px;
+    cursor:pointer;
+}
+
+.linea-card:hover{
+    background:rgba(255,255,255,0.05);
+}
+
+#side-panel.light .linea-card{
+    background:#ffffff;
+    border:1px solid #eee;
+}
+
+.linea-titulo{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-bottom:4px;
+}
+
+.linea-color{
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    display:inline-block;
+}
+
+.linea-detalles p{
+    margin:2px 0;
+}
+
+/* Barra comparativa */
+.linea-bar-wrap{
+    margin-top:4px;
+    width:100%;
+    height:6px;
+    background:rgba(255,255,255,0.06);
+    border-radius:999px;
+    overflow:hidden;
+}
+
+#side-panel.light .linea-bar-wrap{
+    background:rgba(0,0,0,0.06);
+}
+
+.linea-bar{
+    height:100%;
+    background:linear-gradient(90deg,#2b7a78,#11698e);
+}
+
+/* =======================
+   GESTIÓN DE LÍNEAS
+   ======================= */
+
+.gestion-lineas{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    max-height:320px;
+    overflow:auto;
+}
+
+.linea-form{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:4px;
+}
+
+.linea-form input[type="text"],
+.linea-form input[type="number"],
+.linea-form input[type="color"]{
+    padding:8px 10px;
+    border-radius:8px;
+    border:none;
+    background:#0e1112;
+    color:#e6eef2;
+    font-size:13px;
+}
+
+#side-panel.light .linea-form input{
+    background:#fafafa;
+    color:#111;
+    border:1px solid #eee;
+}
+
+/* =======================
+   LISTA DE PARADAS
+   ======================= */
+
+.paradas-lista{
+    margin-top:4px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    font-size:12px;
+}
+
+.parada-item{
+    background:rgba(255,255,255,0.02);
+    border-radius:6px;
+    padding:6px 8px;
+}
+
+#side-panel.light .parada-item{
+    background:#f5f5f5;
+}
+
+.parada-item strong{
+    margin-right:4px;
+}
+
+.parada-item small{
+    display:block;
+}
+
+/* Cabecera parada (num + botón borrar) */
+.parada-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:2px;
+}
+
+/* Nombre editable */
+.parada-item input.parada-nombre{
+    width:100%;
+    margin-top:2px;
+    padding:4px 6px;
+    border-radius:6px;
+    border:none;
+    background:#0e1112;
+    color:#e6eef2;
+    font-size:12px;
+}
+
+#side-panel.light .parada-item input.parada-nombre{
+    background:#ffffff;
+    color:#111;
+    border:1px solid #ddd;
+}
+
+/* Botón eliminar parada */
+.btn-parada-delete{
+    background:transparent;
+    border:none;
+    color:#ff6666;
+    cursor:pointer;
+    padding:2px 6px;
+    font-size:12px;
+    border-radius:4px;
+}
+
+.btn-parada-delete:hover{
+    background:rgba(255,102,102,0.1);
+}
+
+/* Texto ayuda */
+.texto-ayuda{
+    font-size:12px;
+    color:var(--muted);
+    padding:5px 0;
+}
